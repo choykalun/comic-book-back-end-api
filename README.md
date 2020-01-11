@@ -19,3 +19,5 @@ very similar to TCP + TLS + HTTP2, but implemented on top of UDP.
 I will be using python for this project
 I would like to see if I can use a microframework for this project.
 I have found a useful library for QUIC protocol implementation.
+Had done some research on using Hypercorn, however I don't understand why I could not get the latest version on my ubuntu
+The latest version I have is 0.5.4 and the latest version that has --quic-bind is 0.9
