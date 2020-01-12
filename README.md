@@ -21,3 +21,5 @@ I would like to see if I can use a microframework for this project.
 I have found a useful library for QUIC protocol implementation.
 Had done some research on using Hypercorn, however I don't understand why I could not get the latest version on my ubuntu
 The latest version I have is 0.5.4 and the latest version that has --quic-bind is 0.9
+the above problem was fixed when i upgraded my python version to 3.7 from 3.6
+asgi vs wsgi, what is the difference?
