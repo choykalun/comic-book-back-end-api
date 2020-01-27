@@ -72,3 +72,10 @@ async def login():
 
 			return jsonify({"token" : token.decode("UTF-8")})
 		return jsonify({"message" : "password is incorrect"}), 401
+
+@app.route("/user", methods=["DELETE"])
+async def delete_user():
+	db = get_db()
+	data = request.get_json()
+	cur = db.execute("""DELETE * FROM Users WHERE username=?""", [data["username"]])
+	return jsonify({"message" : "User has been deleted."})
