@@ -1,4 +1,6 @@
 import quart.flask_patch
+import jwt
+import datetime
 
 from quart import Quart
 from quart import session, request, jsonify, g
@@ -56,12 +58,17 @@ async def create_user():
 @app.route("/login", methods=['POST'])
 async def login():
 	db = get_db()
-	data = await request.get_json()
-	# print(args["Username"])
-	# print(args["Password"])
-	if args["Username"] == "" or args["Password"] == "" :
-		return '{"message" : "error! username or password are incorrect"}', 404
-	# else: 
-	# 	if args["Username"] != 
+	auth = request.authorization
+	cur = db.execute("""SELECT * FROM Users WHERE username=?""", [auth.username])
+	exist = cur.fetchone()
 
-	return '{"message" : "Log in successful"}', 200
+	if not auth or not auth.username or not auth.password :
+		return '{"message" : "error! username or password are empty"}', 404
+	elif len(exist) == 0:
+		return jsonify({"message" : "The user does not exist or the username is incorrect"}), 404
+	else:
+		if check_password_hash(exist["password"], auth.password):
+			token = jwt.encode({"username" : exist["username"], "exp" : datetime.datetime.utcnow() + datetime.timedelta(minutes=30)}, app.config["SECRET_KEY"])
+
+			return jsonify({"token" : token.decode("UTF-8")})
+		return jsonify({"message" : "password is incorrect"}), 401
