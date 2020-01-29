@@ -7,6 +7,7 @@ from quart import session, request, jsonify, g
 from pathlib import Path
 from sqlite3 import dbapi2 as sqlite3
 from werkzeug.security import generate_password_hash, check_password_hash
+from functools import wraps
 
 
 app = Quart(__name__)
@@ -23,12 +24,37 @@ def connect_db():
 	engine.row_factory = sqlite3.Row
 	return engine
 
+def token_required(f):
+	@wraps(f)
+	def decorated(*args, **kwargs):
+		token = None
+
+		if "token" in request.headers:
+			token = request.headers["token"]
+
+		if not token:
+			return jsonify({"message" : "Token is missing!"}), 401
+
+		try:
+			data = jwt.decode(token, app.config["SECRET_KEY"])
+			db = get_db()
+			cur = db.execute("""SELECT * FROM Users WHERE username=?""", [data["username"]])
+			current_user = cur.fetchone()
+		except:
+			return jsonify({"message" : "Token is invalid!"}), 401
+
+		return f(current_user, *args, **kwargs)
+
+	return decorated
+
+
 @app.cli.command('init_db')
 def init_db():
 	db_connect = connect_db()
 	with open(Path(__file__).parent/'schema.sql', mode='r') as file_:
 		db_connect.cursor().executescript(file_.read())
 	db_connect.commit() 
+
 
 @app.route("/")
 async def index():
@@ -49,8 +75,6 @@ async def create_user():
 			data["email"], hashed_password, data["username"]])
 		db.commit()
 
-	print(data["firstname"])
-
 
 	return jsonify({"message" : "User has been created!"})
 
@@ -64,7 +88,7 @@ async def login():
 
 	if not auth or not auth.username or not auth.password :
 		return '{"message" : "error! username or password are empty"}', 404
-	elif len(exist) == 0:
+	elif not exist:
 		return jsonify({"message" : "The user does not exist or the username is incorrect"}), 404
 	else:
 		if check_password_hash(exist["password"], auth.password):
@@ -73,9 +97,12 @@ async def login():
 			return jsonify({"token" : token.decode("UTF-8")})
 		return jsonify({"message" : "password is incorrect"}), 401
 
+
 @app.route("/user", methods=["DELETE"])
-async def delete_user():
+@token_required
+async def delete_user(current_user):
 	db = get_db()
-	data = request.get_json()
-	cur = db.execute("""DELETE * FROM Users WHERE username=?""", [data["username"]])
+	print(current_user["username"])
+	cur = db.execute("""DELETE FROM Users WHERE username=?""", [current_user["username"]])
+	db.commit()
 	return jsonify({"message" : "User has been deleted."})
