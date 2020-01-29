@@ -60,6 +60,7 @@ def init_db():
 async def index():
     return "Hello World!"
 
+
 @app.route("/user", methods=['POST'])
 async def create_user():
 	db = get_db()
@@ -74,7 +75,6 @@ async def create_user():
 		cur = db.execute("""INSERT INTO Users (firstname, lastname, email, password, username) VALUES (?, ?, ?, ?, ?)""", [data["firstname"], data["lastname"], 
 			data["email"], hashed_password, data["username"]])
 		db.commit()
-
 
 	return jsonify({"message" : "User has been created!"})
 
@@ -102,7 +102,6 @@ async def login():
 @token_required
 async def delete_user(current_user):
 	db = get_db()
-	print(current_user["username"])
 	cur = db.execute("""DELETE FROM Users WHERE username=?""", [current_user["username"]])
 	db.commit()
 	return jsonify({"message" : "User has been deleted."})
