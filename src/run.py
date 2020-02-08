@@ -1,6 +1,7 @@
 import quart.flask_patch
 import jwt
 import datetime
+import requests
 
 from quart import Quart
 from quart import session, request, jsonify, g
@@ -9,7 +10,8 @@ from sqlite3 import dbapi2 as sqlite3
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
 
-
+API_KEY = "35a08e36179322fd7a35a3286874cbb0773db196"
+API_SERVER_URL = "https://comicvine.gamespot.com/api"
 app = Quart(__name__)
 app.secret_key = 'mysecret'
 app.config.update({'DATABASE' : app.root_path/'api_server_comic.db'})
@@ -105,3 +107,23 @@ async def delete_user(current_user):
 	cur = db.execute("""DELETE FROM Users WHERE username=?""", [current_user["username"]])
 	db.commit()
 	return jsonify({"message" : "User has been deleted."})
+
+@app.route("/comic", methods=["POST"])
+@token_required
+async def add_comic_to_collection(current_user):
+	db = get_db()
+
+	#parse the json from the request
+	data = await request.get_json()
+
+	if data["issue"] :
+		issue = data["issue"]
+		headers = {"User-agent" : "My User-agent 1.0"}
+		filter_field = "name:" + issue["name"]
+		print(filter_field)
+		params = {'api_key': API_KEY, 'filter':filter_field, 'field_list':'name,id', 'format':'json'}
+		url = API_SERVER_URL + "/issues"
+
+		response = requests.get(url=url, headers=headers, params=params)
+		print(response.json())
+		return response.json()
