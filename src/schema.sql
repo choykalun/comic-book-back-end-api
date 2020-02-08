@@ -11,13 +11,15 @@ CREATE TABLE Users (
 DROP TABLE IF EXISTS Issues;
 CREATE TABLE Issues (
 	issueid INTEGER VARCHAR(20) PRIMARY KEY,
-	name VARCHAR(255)
+	name VARCHAR(255),
+	issuenumber VARCHAR(20)
 );
 
 DROP TABLE IF EXISTS Volumes;
 CREATE TABLE Volumes (
 	volumeid INTEGER VARCHAR(20) PRIMARY KEY,
-	name VARCHAR(255)
+	name VARCHAR(255),
+	volumenumber VARCHAR(20)
 );
 
 DROP TABLE IF EXISTS IssuesInVolumes;

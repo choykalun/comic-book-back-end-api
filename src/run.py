@@ -94,7 +94,7 @@ async def login():
 		return jsonify({"message" : "The user does not exist or the username is incorrect"}), 404
 	else:
 		if check_password_hash(exist["password"], auth.password):
-			token = jwt.encode({"username" : exist["username"], "exp" : datetime.datetime.utcnow() + datetime.timedelta(minutes=30)}, app.config["SECRET_KEY"])
+			token = jwt.encode({"username" : exist["username"], "exp" : datetime.datetime.utcnow() + datetime.timedelta(minutes=60)}, app.config["SECRET_KEY"])
 
 			return jsonify({"token" : token.decode("UTF-8")})
 		return jsonify({"message" : "password is incorrect"}), 401
@@ -121,9 +121,27 @@ async def add_comic_to_collection(current_user):
 		headers = {"User-agent" : "My User-agent 1.0"}
 		filter_field = "name:" + issue["name"]
 		print(filter_field)
-		params = {'api_key': API_KEY, 'filter':filter_field, 'field_list':'name,id', 'format':'json'}
+		params = {'api_key': API_KEY, 'filter':filter_field, 'field_list':'name,id,issue_number', 'format':'json'}
 		url = API_SERVER_URL + "/issues"
 
 		response = requests.get(url=url, headers=headers, params=params)
-		print(response.json())
-		return response.json()
+		json_response = response.json()
+		list_of_issues = json_response["results"]
+		result_to_add = []
+		
+		for i in range(len(list_of_issues)):
+			if list_of_issues[i]["name"].lower() == issue["name"].lower() and list_of_issues[i]["issue_number"] == issue["issue_number"]:
+				result_to_add.append(list_of_issues[i])
+
+		if len(result_to_add) == 1:
+			issue_to_add = result_to_add[0]
+			cur = db.execute("""SELECT * FROM Issues WHERE issueid=?""", [issue_to_add["id"]])
+			exist = cur.fetchone()
+			if not exist:
+				cur = db.execute("""INSERT INTO Issues (name, issuenumber, issueid) VALUES (?, ?, ?)""", [issue_to_add["name"], issue_to_add["issue_number"], issue_to_add["id"]])
+				db.commit()
+			cur = db.execute("""INSERT INTO UsersIssues (username, issueid) VALUES (?, ?)""", [current_user["username"], issue_to_add["id"]])
+			db.commit()
+			return jsonify({"meessage" : "Issue added"})
+		else:
+			return jsonify({"message" : "something went wrong"})
