@@ -19,7 +19,7 @@ DROP TABLE IF EXISTS Volumes;
 CREATE TABLE Volumes (
 	volumeid INTEGER VARCHAR(20) PRIMARY KEY,
 	name VARCHAR(255),
-	volumenumber VARCHAR(20)
+	count_of_issues VARCHAR(20)
 );
 
 DROP TABLE IF EXISTS IssuesInVolumes;
