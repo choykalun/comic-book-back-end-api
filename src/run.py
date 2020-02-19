@@ -163,140 +163,175 @@ async def deleteUser(current_user):
 	db = getDB()
 	cur = db.execute("""DELETE FROM Users WHERE username=?""", [current_user["username"]])
 	db.commit()
-	return jsonify({"message" : "User has been deleted."})
+	return jsonify({"message" : "User has been deleted."}), 200
 
-@app.route("/comic", methods=["POST"])
+@app.route("/comic/issue", methods=["POST"])
 @tokenRequired
-async def addComicToCollection(current_user):
+async def addIssueToCollection(current_user):
 	db = getDB()
 
 	#parse the json from the request
 	data = await request.get_json()
+	issue = data["issue"]
+	headers = {"User-agent" : "My User-agent 1.0"}
+	filter_field = "name:" + issue["name"]
+	params = {'api_key': API_KEY, 'filter':filter_field, 'field_list':'name,id,issue_number', 'format':'json'}
+	url = API_SERVER_URL + "/issues"
 
-	if "issue" in data:
-		issue = data["issue"]
-		headers = {"User-agent" : "My User-agent 1.0"}
-		filter_field = "name:" + issue["name"]
-		params = {'api_key': API_KEY, 'filter':filter_field, 'field_list':'name,id,issue_number', 'format':'json'}
-		url = API_SERVER_URL + "/issues"
+	response = requests.get(url=url, headers=headers, params=params)
+	json_response = response.json()
+	list_of_issues = json_response["results"]
+	result_to_add = []
+	
+	for i in range(len(list_of_issues)):
+		if list_of_issues[i]["name"].lower() == issue["name"].lower() and list_of_issues[i]["issue_number"] == issue["issue_number"]:
+			result_to_add.append(list_of_issues[i])
 
-		response = requests.get(url=url, headers=headers, params=params)
-		json_response = response.json()
-		list_of_issues = json_response["results"]
-		result_to_add = []
-		
-		for i in range(len(list_of_issues)):
-			if list_of_issues[i]["name"].lower() == issue["name"].lower() and list_of_issues[i]["issue_number"] == issue["issue_number"]:
-				result_to_add.append(list_of_issues[i])
+	if len(result_to_add) == 1:
+		issue_to_add = result_to_add[0]
+		cur = db.execute("""SELECT * FROM Issues WHERE issueid=?""", [issue_to_add["id"]])
+		exist = cur.fetchone()
+		if not exist:
+			addItemToDB("issue", issue_to_add)
+		if not checkRelationExists("issue", current_user, issue_to_add):
+			addRelationToUser("issue", current_user, issue_to_add)
+		return jsonify({"meessage" : "Issue added"}), 200
+	else:
+		return jsonify({"message" : "something went wrong"}), 401
 
-		if len(result_to_add) == 1:
-			issue_to_add = result_to_add[0]
-			cur = db.execute("""SELECT * FROM Issues WHERE issueid=?""", [issue_to_add["id"]])
-			exist = cur.fetchone()
-			if not exist:
-				addItemToDB("issue", issue_to_add)
-			if not checkRelationExists("issue", current_user, issue_to_add):
-				addRelationToUser("issue", current_user, issue_to_add)
-			return jsonify({"meessage" : "Issue added"})
-		else:
-			return jsonify({"message" : "something went wrong"})
 
+@app.route("/comic/volume", methods=["POST"])
+@tokenRequired
+async def addVolumeToCollection(current_user):
 	# if the json object is volume, then we add the volume to the database for the user and then we also find 
 	# the issues related to the volume and add them to the database 
-	if "volume" in data:
-		volume = data["volume"]
-		headers = {"User-agent" : "My User-agent 1.0"}
-		filter_field = ""
-		if "name" in volume:
-			filter_field = "name:" + volume["name"]
-		params = {"api_key" : API_KEY, "filter" : filter_field, "field_list" : "name,id,count_of_issues,image", "format" : "json"}
-		url = API_SERVER_URL + "/volumes"
+	db = getDB()
 
-		response = requests.get(url=url, headers=headers, params=params)
-		json_response = response.json()
-		list_of_volumes = json_response["results"]
-		# in order to fix this code, I will need to do something similar to get the full list of volumes and the iterate through the list 
-		# and then add them to the list to insert into the database. 
-		if "list_of_volumes" in data["volume"]:
-			for each in data["volume"]["list_of_volumes"]:
-				exist = checkIfExist("volume", each)
-				if not exist:
-					addItemToDB("volume", each)
-				if not checkRelationExists("volume", current_user, each):
-					addRelationToUser("volume", current_user, each)
+	#parse the json from the request
+	data = await request.get_json()
+	volume = data["volume"]
+	headers = {"User-agent" : "My User-agent 1.0"}
+	filter_field = ""
+	if "name" in volume:
+		filter_field = "name:" + volume["name"]
+	params = {"api_key" : API_KEY, "filter" : filter_field, "field_list" : "name,id,count_of_issues,image", "format" : "json"}
+	url = API_SERVER_URL + "/volumes"
 
-				filter_field = "volume:" + str(each["id"])
-				params["filter"] = filter_field
-				params["field_list"] = "name,id,issue_number"
-				url = API_SERVER_URL + "/issues"
+	response = requests.get(url=url, headers=headers, params=params)
+	json_response = response.json()
+	list_of_volumes = json_response["results"]
+	# in order to fix this code, I will need to do something similar to get the full list of volumes and the iterate through the list 
+	# and then add them to the list to insert into the database. 
+	if "list_of_volumes" in data["volume"]:
+		for each in data["volume"]["list_of_volumes"]:
+			exist = checkIfExist("volume", each)
+			if not exist:
+				addItemToDB("volume", each)
+			if not checkRelationExists("volume", current_user, each):
+				addRelationToUser("volume", current_user, each)
 
-				response = requests.get(url=url, headers=headers, params=params)
-				json_response = response.json()
-				list_of_issues = json_response["results"]
+			filter_field = "volume:" + str(each["id"])
+			params["filter"] = filter_field
+			params["field_list"] = "name,id,issue_number"
+			url = API_SERVER_URL + "/issues"
 
-				if json_response["number_of_total_results"] > 100:
-					count = 100
-					while (len(list_of_issues) != json_response["number_of_total_results"]):
-						params["offset"] = count
-						response = requests.get(url=url, headers=headers, params=params)
-						json_response = response.json()
-						list_of_issues += json_response["results"]
-						count += 100
-				for item in list_of_issues:
-					exist = checkIfExist("issue", item)
-					if not exist:
-						addItemToDB("issue", item)
-					if not checkRelationExists("issue", current_user, item):
-						addRelationToUser("issue", current_user, item)
-					if not checkIssueInVolume(each, item):
-						addRelationToVolume(each, item)
-			return jsonify({"message":"Done"})
+			response = requests.get(url=url, headers=headers, params=params)
+			json_response = response.json()
+			list_of_issues = json_response["results"]
 
-
-		if len(list_of_volumes) > 1:
-			start_time = time.time()
 			if json_response["number_of_total_results"] > 100:
 				count = 100
-				while (len(list_of_volumes) != json_response["number_of_total_results"]):
+				while (len(list_of_issues) != json_response["number_of_total_results"]):
 					params["offset"] = count
 					response = requests.get(url=url, headers=headers, params=params)
 					json_response = response.json()
-					list_of_volumes += json_response["results"]
+					list_of_issues += json_response["results"]
 					count += 100
-			for each in list_of_volumes:
-				# make sure the response only returns the original image url of the item
-				each["image"] = each["image"]["original_url"]
-			end_time = time.time()
-			print("Program ended in %s seconds" %(end_time - start_time))
+			for item in list_of_issues:
+				exist = checkIfExist("issue", item)
+				if not exist:
+					addItemToDB("issue", item)
+				if not checkRelationExists("issue", current_user, item):
+					addRelationToUser("issue", current_user, item)
+				if not checkIssueInVolume(each, item):
+					addRelationToVolume(each, item)
+		return jsonify({"message":"Done"}), 200
 
-			return jsonify({"message" : "please return a list of volumes to add from the list.", "list_of_volumes" : list_of_volumes})
+
+	if len(list_of_volumes) > 1:
+		start_time = time.time()
+		if json_response["number_of_total_results"] > 100:
+			count = 100
+			while (len(list_of_volumes) != json_response["number_of_total_results"]):
+				params["offset"] = count
+				response = requests.get(url=url, headers=headers, params=params)
+				json_response = response.json()
+				list_of_volumes += json_response["results"]
+				count += 100
+		for each in list_of_volumes:
+			# make sure the response only returns the original image url of the item
+			each["image"] = each["image"]["original_url"]
+		end_time = time.time()
+		print("Program ended in %s seconds" %(end_time - start_time))
+
+		return jsonify({"message" : "please return a list of volumes to add from the list.", "list_of_volumes" : list_of_volumes}), 200
 
 
+@app.route("/comics/volumes", methods=["GET"])
+@tokenRequired
+async def list_volumes(current_user):
+	query_params = request.args
+	list_of_volumes = []
+	db = getDB()
+	cur = db.execute("""SELECT volumeid FROM UsersVolumes WHERE username=?""", [current_user["username"]])
+	volume_ids = cur.fetchall()
+	if "filter" in query_params:
+		field, value = query_params["filter"].split(":", 1)
+		search_name = "%" + value + "%"
+	for each in volume_ids:
+		if "filter" in query_params:
+			print(search_name)
+			cur = db.execute("""SELECT * FROM Volumes WHERE volumeid=? AND name LIKE ?""", [each["volumeid"], search_name])
+		else:
+			cur = db.execute("""SELECT * FROM Volumes WHERE volumeid=?""", [each["volumeid"]])
+		item = cur.fetchone()
+		if item:
+			list_of_volumes.append({"volumeid" : item["volumeid"], "name" : item["name"], "count_of_issues" : item["count_of_issues"]})
+	if "sort" in query_params:
+		sort_param = query_params["sort"].split("_")
+		sort_field = sort_param[0]
+		if sort_field == "name":
+			newlist = sorted(list_of_volumes, key=lambda k: k[sort_field], reverse=(True if len(sort_param) > 1 and "desc" == sort_param[1] else False))
+		else:
+			newlist = sorted(list_of_volumes, key=lambda k: int(k[sort_field]), reverse=(True if len(sort_param) > 1 and "desc" == sort_param[1] else False))
+	return jsonify({"list_of_volumes" : list_of_volumes}), 200
 
-		# if there was an item returned by the response, then we will add it to the database
-		# if len(result_to_add) == 1:
-		# 	volume_to_add = result_to_add[0]
-		# 	exist = checkIfExist("volume", volume_to_add)
-		# 	if not exist:
-		# 		addItemToDB("volume", volume_to_add)
-		# 	addRelationToUser("volume", current_user, volume_to_add)
 
-		# 	filter_field = "volume:" + volume_to_add["id"]
-		# 	params["filter"] = filter_field
-		# 	params["field_list"] = "name,id,issue_number"
-		# 	url = API_SERVER_URL + "/issues"
+@app.route("/comics/issues", methods=["GET"])
+@tokenRequired
+async def list_issues(current_user):
+	query_params = request.args
+	list_of_issues = []
+	db = getDB()
+	cur = db.execute("""SELECT issueid FROM UsersIssues WHERE username=?""", [current_user["username"]])
+	issue_ids = cur.fetchall()
+	if "filter" in query_params:
+		field, value = query_params["filter"].split(":", 1)
+		search_name = "%" + value + "%"
+	for each in issue_ids:
+		if "filter" in query_params:
+			cur = db.execute("""SELECT * FROM Issues WHERE issueid=? AND name LIKE ?""", [each["issueid"], search_name])
+		else:
+			cur = db.execute("""SELECT * FROM Issues WHERE issueid=?""", [each["issueid"]])
+		item = cur.fetchone()
+		if item:
+			list_of_issues.append({"issueid" : item["issueid"], "name" : item["name"], "issuenumber" : item["issuenumber"]})
+	if "sort" in query_params:
+		sort_param = query_params["sort"].split("_")
+		sort_field = sort_param[0]
+		if sort_field == "name":
+			newlist = sorted(list_of_issues, key=lambda k: k[sort_field], reverse=(True if len(sort_param) > 1 and "desc" == sort_param[1] else False))
+		else:
+			newlist = sorted(list_of_issues, key=lambda k: int(k[sort_field]), reverse=(True if len(sort_param) > 1 and "desc" == sort_param[1] else False))
+	return jsonify({"list_of_issues" : newlist}), 200
 
-		# 	response = requests.get(url=url, headers=headers, params=params)
-		# 	json_response = response.json()
-		# 	list_of_issues = json_response["results"]
-
-		# 	if json_response["number_of_total_results"] > 100:
-		# 		count = 100
-		# 		while (len(list_of_issues) != json_response["number_of_total_results"]):
-		# 			params["offset"] = count
-		# 			response.get(url=url, headers=headers, params=params)
-		# 			json_response = response.json()
-		# 			list_of_issues += json_response["results"]
-		# 			count += 100
-		# 	print(len(list_of_issues))
-		# return jsonify({"message" : "Done"})
