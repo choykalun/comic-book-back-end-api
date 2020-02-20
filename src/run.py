@@ -335,3 +335,32 @@ async def list_issues(current_user):
 			newlist = sorted(list_of_issues, key=lambda k: int(k[sort_field]), reverse=(True if len(sort_param) > 1 and "desc" == sort_param[1] else False))
 	return jsonify({"list_of_issues" : newlist}), 200
 
+
+@app.route("/comic/issue/<issueid>", methods=["GET"])
+@tokenRequired
+async def get_issue(current_user, issueid):
+	db = getDB()
+	cur = db.execute("""SELECT issueid FROM UsersIssues WHERE username=?""", [current_user["username"]])
+	issue_ids = cur.fetchall()
+	for each in issue_ids:
+		if issueid == each["issueid"]:
+			cur = db.execute("""SELECT * FROM Issues WHERE issueid=?""", [issueid])
+			item = cur.fetchone()
+			if item:
+				return jsonify({"issue" : {"issueid" : item["issueid"], "name" : item["name"], "issuenumber" : item["issuenumber"]}}), 200
+	return jsonify({"result" : "no such issue belongs to the user"}), 404
+
+
+@app.route("/comic/volume/<volumeid>", methods=["GET"])
+@tokenRequired
+async def get_volume(current_user, volumeid):
+	db = getDB()
+	cur = db.execute("""SELECT volumeid FROM UsersVolumes WHERE username=?""", [current_user["username"]])
+	volume_ids = cur.fetchall()
+	for each in volume_ids:
+		if volumeid == each["volumeid"]:
+			cur = db.execute("""SELECT * FROM Volumes WHERE volumeid=?""", [volumeid])
+			item = cur.fetchone()
+			if item:
+				return jsonify({"volume" : {"volumeid" : item["volumeid"], "name" : item["name"], "count_of_issues" : item["count_of_issues"]}}), 200
+	return jsonify({"result" : "no such volume belongs to the user"}), 404
