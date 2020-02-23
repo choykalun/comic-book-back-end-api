@@ -181,6 +181,7 @@ async def addIssueToCollection(current_user):
 	response = requests.get(url=url, headers=headers, params=params)
 	json_response = response.json()
 	list_of_issues = json_response["results"]
+	print(list_of_issues)
 	result_to_add = []
 	
 	for i in range(len(list_of_issues)):
@@ -191,12 +192,16 @@ async def addIssueToCollection(current_user):
 		issue_to_add = result_to_add[0]
 		cur = db.execute("""SELECT * FROM Issues WHERE issueid=?""", [issue_to_add["id"]])
 		exist = cur.fetchone()
+		print("1")
 		if not exist:
 			addItemToDB("issue", issue_to_add)
+			print("2")
 		if not checkRelationExists("issue", current_user, issue_to_add):
+			print("3")
 			addRelationToUser("issue", current_user, issue_to_add)
 		return jsonify({"meessage" : "Issue added"}), 200
 	else:
+		print(len(result_to_add))
 		return jsonify({"message" : "something went wrong"}), 401
 
 
@@ -220,6 +225,7 @@ async def addVolumeToCollection(current_user):
 	response = requests.get(url=url, headers=headers, params=params)
 	json_response = response.json()
 	list_of_volumes = json_response["results"]
+	print(list_of_volumes)
 	# in order to fix this code, I will need to do something similar to get the full list of volumes and the iterate through the list 
 	# and then add them to the list to insert into the database. 
 	if "list_of_volumes" in data["volume"]:
@@ -304,6 +310,7 @@ async def list_volumes(current_user):
 			newlist = sorted(list_of_volumes, key=lambda k: k[sort_field], reverse=(True if len(sort_param) > 1 and "desc" == sort_param[1] else False))
 		else:
 			newlist = sorted(list_of_volumes, key=lambda k: int(k[sort_field]), reverse=(True if len(sort_param) > 1 and "desc" == sort_param[1] else False))
+		return jsonify({"list_of_issues" : newlist}), 200
 	return jsonify({"list_of_volumes" : list_of_volumes}), 200
 
 
@@ -333,7 +340,8 @@ async def list_issues(current_user):
 			newlist = sorted(list_of_issues, key=lambda k: k[sort_field], reverse=(True if len(sort_param) > 1 and "desc" == sort_param[1] else False))
 		else:
 			newlist = sorted(list_of_issues, key=lambda k: int(k[sort_field]), reverse=(True if len(sort_param) > 1 and "desc" == sort_param[1] else False))
-	return jsonify({"list_of_issues" : newlist}), 200
+		return jsonify({"list_of_issues" : newlist}), 200
+	return jsonify({"list_of_issues" : list_of_issues}), 200
 
 
 @app.route("/comic/issue/<issueid>", methods=["GET"])
@@ -364,3 +372,30 @@ async def get_volume(current_user, volumeid):
 			if item:
 				return jsonify({"volume" : {"volumeid" : item["volumeid"], "name" : item["name"], "count_of_issues" : item["count_of_issues"]}}), 200
 	return jsonify({"result" : "no such volume belongs to the user"}), 404
+
+
+@app.route("/comic/volume/<volumeid>", methods=["DELETE"])
+@tokenRequired
+async def delete_volume(current_user, volumeid):
+	db = getDB()
+	cur = db.execute("""SELECT * FROM UsersVolumes WHERE username=? AND volumeid=?""", [current_user["username"], volumeid])
+	exist = cur.fetchone()
+	if exist:
+		cur = db.execute("""DELETE FROM UsersVolumes WHERE username=? AND volumeid=?""", [current_user["username"], volumeid])
+		db.commit()
+		return jsonify({"result" : "Volume has been deleted from user"}), 200
+	return jsonify({"result" : "Volume not found under username"}), 404
+
+
+@app.route("/comic/issue/<issueid>", methods=["DELETE"])
+@tokenRequired
+async def delete_issue(current_user, issueid):
+	db = getDB()
+	cur = db.execute("""SELECT * FROM UsersIssues WHERE username=? AND issueid=?""", [current_user["username"], issueid])
+	exist = cur.fetchone()
+	if exist:
+		cur = db.execute("""DELETE FROM UsersIssues WHERE username=? AND issueid=?""", [current_user["username"], issueid])
+		db.commit()
+		return jsonify({"result" : "Issue has been deleted from user"}), 200
+	return jsonify({"result" : "Issue not found under username"}), 404
+
