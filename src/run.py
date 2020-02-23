@@ -182,6 +182,7 @@ async def addIssueToCollectionById(current_user, issueid):
 
     if len(issues_returned) == 1:
         issue_to_add = issues_returned[0]
+        volume = issue_to_add["volume"]
         if not checkIfExist("issue", issue_to_add):
             addItemToDB("issue", issue_to_add)
         if not checkRelationExists("issue", current_user,issue_to_add):
@@ -233,6 +234,30 @@ async def addIssueToCollection(current_user):
     else:
         print(len(result_to_add))
         return jsonify({"message" : "something went wrong"}), 401
+
+
+@app.route("/comic/volume/<volumeid>", methods=["POST"])
+@tokenRequired
+async def addVolumeToCollectionById(current_user, volumeid):
+    db = getDB()
+
+    headers = {"User-agent" : "My User-agent 1.0"}
+    filter_filed = "id:" + volumeid
+    params = {"api_key" : API_KEY, "filter" : filter_field, "field_list" : "name,id,count_of_issues,image", "format" : "json"}
+    url = API_SERVER_URL + "/volumes"
+
+    response = requests.get(url=url, headers=headers, params=params)
+    json_response = response.json()
+    volume_returned = json_response["results"]
+
+    if len(volume_returned) == 1:
+        volume_to_add = volume_returned[0]
+        if not checkIfExist("volume", volume_to_add):
+            addItemToDB("volume", volume_to_add)
+        if not checkRelationExists(current_user, volume_to_add):
+            addRelationToUser("volume", current_user, volume_to_add)
+
+        # Fix the adding issues in this part!
 
 
 @app.route("/comic/volume", methods=["POST"])
