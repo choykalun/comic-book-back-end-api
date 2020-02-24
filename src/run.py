@@ -106,6 +106,43 @@ def addRelationToVolume(volume, issue):
     db.commit()
 
 
+def addIssuesFromList(current_user, volume, issues_list):
+    # function to add issue by list
+    # check if they are already in the database
+    for each in issues_list:
+        if not checkIfExist("issue", each):
+            # add the issue into the database if it does not exist
+            addItemToDB("issue", each)
+        if not checkIssueInVolume(volume, each):
+            # then add the relation for the issue to the volume
+            addRelationToVolume(volume, each)
+        if not checkRelationExists("issue", current_user, each):
+            # finally add the issue into the user
+            addRelationToUser("issue", current_user, each)
+
+
+def returnListOfIssuesByVolumeID(volumeid):
+    headers = {"User-agent" : "My User-agent 1.0"}
+    filter_field = "volume:" + str(volumeid)
+    params = {"api_key" : API_KEY, "filter" : filter_field, "field_list" : "name,id,issue_number", "format" : "json"}
+    url = API_SERVER_URL + "/issues"
+    response = requests.get(url=url, headers=headers, params=params)
+    # get the list of issues from the response
+    json_response = response.json()
+    issues_returned = json_response["results"]
+
+    if json_response["number_of_total_results"] > 100:
+        count = 100
+        while (len(issues_returned) != json_response["number_of_total_results"]):
+            params["offset"] = count
+            response = requests.get(url=url, headers=headers, params=params)
+            json_response = response.json()
+            issues_returned += json_response["results"]
+            count += 100
+
+    return issues_returned
+
+
 
 @app.cli.command('init_db')
 def init_db():
@@ -191,87 +228,41 @@ async def addIssueToCollectionById(current_user, issueid):
         if checkIfExist("volume", volume):
             addRelationToVolume(volume, issue)
 
-        return jsonify({"result" : "Issue added"}), 200
+        return jsonify({"result" : "Issue added"}), 201
     else:
         return jsonify({"result" : "Please try again with the correct id"}), 404
 
 
-@app.route("/comic/issue", methods=["POST"])
+@app.route("/comic/issue", methods=["GET"])
 @tokenRequired
-async def addIssueToCollection(current_user):
-    db = getDB()
-
-    #parse the json from the request
+async def getIssueInformation(current_user):
+    # This function gets the information of issues from the comic vine api server
+    # to ensure we store the correct details for the issues.
     data = await request.get_json()
     issue = data["issue"]
     headers = {"User-agent" : "My User-agent 1.0"}
     filter_field = "name:" + issue["name"]
-    params = {'api_key': API_KEY, 'filter':filter_field, 'field_list':'name,id,issue_number', 'format':'json'}
+    params = {"api_key" : API_KEY, "filter" : filter_field, "field_list" : "name,id,issue_number,image", "format" : "json"}
     url = API_SERVER_URL + "/issues"
 
     response = requests.get(url=url, headers=headers, params=params)
     json_response = response.json()
     list_of_issues = json_response["results"]
-    print(list_of_issues)
-    result_to_add = []
+
+    if len(list_of_issues) > 1:
+        if json_response["number_of_total_results"] > 100:
+            count = 100
+            while (len(list_of_issues) != json_response["number_of_total_results"]):
+                params["offset"] = count
+                response = requests.get(url=url, headers=headers, params=params)
+                json_response = response.json()
+                list_of_issues += json_response["results"]
+                count += 100
+        for each in list_of_issues:
+            # make sure the response only returns the original image url of the item
+            each["image"] = each["image"]["original_url"]
+        return jsonify({"result" : list_of_issues}), 200
     
-    for i in range(len(list_of_issues)):
-        if list_of_issues[i]["name"].lower() == issue["name"].lower() and list_of_issues[i]["issue_number"] == issue["issue_number"]:
-            result_to_add.append(list_of_issues[i])
-
-    if len(result_to_add) == 1:
-        issue_to_add = result_to_add[0]
-        cur = db.execute("""SELECT * FROM Issues WHERE issueid=?""", [issue_to_add["id"]])
-        exist = cur.fetchone()
-        print("1")
-        if not exist:
-            addItemToDB("issue", issue_to_add)
-            print("2")
-        if not checkRelationExists("issue", current_user, issue_to_add):
-            print("3")
-            addRelationToUser("issue", current_user, issue_to_add)
-        return jsonify({"meessage" : "Issue added"}), 200
-    else:
-        print(len(result_to_add))
-        return jsonify({"message" : "something went wrong"}), 401
-
-
-def addIssuesFromList(current_user, volume, issues_list):
-    # function to add issue by list
-    # check if they are already in the database
-    for each in issues_list:
-        if not checkIfExist("issue", each):
-            # add the issue into the database if it does not exist
-            addItemToDB("issue", each)
-        if not checkIssueInVolume(volume, each):
-            # then add the relation for the issue to the volume
-            addRelationToVolume(volume, each)
-        if not checkRelationExists("issue", current_user, each):
-            # finally add the issue into the user
-            addRelationToUser("issue", current_user, each)
-
-
-def returnListOfIssuesByVolumeID(volumeid):
-    headers = {"User-agent" : "My User-agent 1.0"}
-    filter_field = "volume:" + str(volumeid)
-    params = {"api_key" : API_KEY, "filter" : filter_field, "field_list" : "name,id,issue_number", "format" : "json"}
-    url = API_SERVER_URL + "/issues"
-    response = requests.get(url=url, headers=headers, params=params)
-    # get the list of issues from the response
-    json_response = response.json()
-    issues_returned = json_response["results"]
-
-    if json_response["number_of_total_results"] > 100:
-        count = 100
-        while (len(issues_returned) != json_response["number_of_total_results"]):
-            params["offset"] = count
-            response = requests.get(url=url, headers=headers, params=params)
-            json_response = response.json()
-            issues_returned += json_response["results"]
-            count += 100
-
-    return issues_returned
-
 
 
 @app.route("/comic/volume/<volumeid>", methods=["POST"])
@@ -300,10 +291,12 @@ async def addVolumeToCollectionById(current_user, volumeid):
         list_of_issues = returnListOfIssuesByVolumeID(volumeid)
         print(len(list_of_issues))
         addIssuesFromList(current_user, volume_to_add, list_of_issues)
-        return jsonify({"result" : "Success"})
+        return jsonify({"result" : "Success"}), 201
+    else:
+        return jsonify({"result" : "Please try again with the correct id"}), 404
 
 
-@app.route("/comic/volume", methods=["POST"])
+@app.route("/comic/volume", methods=["GET"])
 @tokenRequired
 async def addVolumeToCollection(current_user):
     # if the json object is volume, then we add the volume to the database for the user and then we also find 
