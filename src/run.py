@@ -236,13 +236,51 @@ async def addIssueToCollection(current_user):
         return jsonify({"message" : "something went wrong"}), 401
 
 
+def addIssuesFromList(current_user, volume, issues_list):
+    # function to add issue by list
+    # check if they are already in the database
+    for each in issues_list:
+        if not checkIfExist("issue", each):
+            # add the issue into the database if it does not exist
+            addItemToDB("issue", each)
+        if not checkIssueInVolume(volume, each):
+            # then add the relation for the issue to the volume
+            addRelationToVolume(volume, each)
+        if not checkRelationExists("issue", current_user, each):
+            # finally add the issue into the user
+            addRelationToUser("issue", current_user, each)
+
+
+def returnListOfIssuesByVolumeID(volumeid):
+    headers = {"User-agent" : "My User-agent 1.0"}
+    filter_field = "volume:" + str(volumeid)
+    params = {"api_key" : API_KEY, "filter" : filter_field, "field_list" : "name,id,issue_number", "format" : "json"}
+    url = API_SERVER_URL + "/issues"
+    response = requests.get(url=url, headers=headers, params=params)
+    # get the list of issues from the response
+    json_response = response.json()
+    issues_returned = json_response["results"]
+
+    if json_response["number_of_total_results"] > 100:
+        count = 100
+        while (len(issues_returned) != json_response["number_of_total_results"]):
+            params["offset"] = count
+            response = requests.get(url=url, headers=headers, params=params)
+            json_response = response.json()
+            issues_returned += json_response["results"]
+            count += 100
+
+    return issues_returned
+
+
+
 @app.route("/comic/volume/<volumeid>", methods=["POST"])
 @tokenRequired
 async def addVolumeToCollectionById(current_user, volumeid):
     db = getDB()
 
     headers = {"User-agent" : "My User-agent 1.0"}
-    filter_filed = "id:" + volumeid
+    filter_field = "id:" + str(volumeid)
     params = {"api_key" : API_KEY, "filter" : filter_field, "field_list" : "name,id,count_of_issues,image", "format" : "json"}
     url = API_SERVER_URL + "/volumes"
 
@@ -254,10 +292,15 @@ async def addVolumeToCollectionById(current_user, volumeid):
         volume_to_add = volume_returned[0]
         if not checkIfExist("volume", volume_to_add):
             addItemToDB("volume", volume_to_add)
-        if not checkRelationExists(current_user, volume_to_add):
+        if not checkRelationExists("volume", current_user, volume_to_add):
             addRelationToUser("volume", current_user, volume_to_add)
 
         # Fix the adding issues in this part!
+
+        list_of_issues = returnListOfIssuesByVolumeID(volumeid)
+        print(len(list_of_issues))
+        addIssuesFromList(current_user, volume_to_add, list_of_issues)
+        return jsonify({"result" : "Success"})
 
 
 @app.route("/comic/volume", methods=["POST"])
@@ -280,7 +323,6 @@ async def addVolumeToCollection(current_user):
     response = requests.get(url=url, headers=headers, params=params)
     json_response = response.json()
     list_of_volumes = json_response["results"]
-    print(list_of_volumes)
     # in order to fix this code, I will need to do something similar to get the full list of volumes and the iterate through the list 
     # and then add them to the list to insert into the database. 
     if "list_of_volumes" in data["volume"]:
@@ -291,31 +333,8 @@ async def addVolumeToCollection(current_user):
             if not checkRelationExists("volume", current_user, each):
                 addRelationToUser("volume", current_user, each)
 
-            filter_field = "volume:" + str(each["id"])
-            params["filter"] = filter_field
-            params["field_list"] = "name,id,issue_number"
-            url = API_SERVER_URL + "/issues"
-
-            response = requests.get(url=url, headers=headers, params=params)
-            json_response = response.json()
-            list_of_issues = json_response["results"]
-
-            if json_response["number_of_total_results"] > 100:
-                count = 100
-                while (len(list_of_issues) != json_response["number_of_total_results"]):
-                    params["offset"] = count
-                    response = requests.get(url=url, headers=headers, params=params)
-                    json_response = response.json()
-                    list_of_issues += json_response["results"]
-                    count += 100
-            for item in list_of_issues:
-                exist = checkIfExist("issue", item)
-                if not exist:
-                    addItemToDB("issue", item)
-                if not checkRelationExists("issue", current_user, item):
-                    addRelationToUser("issue", current_user, item)
-                if not checkIssueInVolume(each, item):
-                    addRelationToVolume(each, item)
+            list_of_issues = returnListOfIssuesByVolumeID(each["id"])
+            addIssuesFromList(current_user, each, list_of_issues)
         return jsonify({"message":"Done"}), 200
 
 
@@ -382,7 +401,12 @@ async def list_issues(current_user):
         search_name = "%" + value + "%"
     for each in issue_ids:
         if "filter" in query_params:
-            cur = db.execute("""SELECT * FROM Issues WHERE issueid=? AND name LIKE ?""", [each["issueid"], search_name])
+            if field == "volume":
+                cur = db.execute("""SELECT * FROM IssuesInVolumes WHERE issueid=? AND volumeid=?""", [each["issueid"], value])
+                if cur.fetchone():
+                    cur = db.execute("""SELECT * FROM Issues WHERE issueid=?""", [each["issueid"]])
+            else:
+                cur = db.execute("""SELECT * FROM Issues WHERE issueid=? AND name LIKE ?""", [each["issueid"], search_name])
         else:
             cur = db.execute("""SELECT * FROM Issues WHERE issueid=?""", [each["issueid"]])
         item = cur.fetchone()
@@ -438,6 +462,11 @@ async def delete_volume(current_user, volumeid):
     if exist:
         cur = db.execute("""DELETE FROM UsersVolumes WHERE username=? AND volumeid=?""", [current_user["username"], volumeid])
         db.commit()
+        cur = db.execute("""SELECT * FROM IssuesInVolumes WHERE volumeid=?""", [volumeid])
+        issues_list = cur.fetchall()
+        for each in issues_list:
+            cur = db.execute("""DELETE FROM UsersIssues WHERE username=? AND issueid=?""", [current_user["username"], each["issueid"]])
+            db.commit()
         return jsonify({"result" : "Volume has been deleted from user"}), 200
     return jsonify({"result" : "Volume not found under username"}), 404
 
