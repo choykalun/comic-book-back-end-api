@@ -154,7 +154,7 @@ def init_db():
 
 @app.route("/")
 async def index():
-    return "Hello World!"
+    return "Hello world!"
 
 
 @app.route("/user", methods=['POST'])
@@ -248,8 +248,8 @@ async def getIssueInformation(current_user):
     response = requests.get(url=url, headers=headers, params=params)
     json_response = response.json()
     list_of_issues = json_response["results"]
-
     if len(list_of_issues) > 1:
+        list_to_return = []
         if json_response["number_of_total_results"] > 100:
             count = 100
             while (len(list_of_issues) != json_response["number_of_total_results"]):
@@ -261,7 +261,9 @@ async def getIssueInformation(current_user):
         for each in list_of_issues:
             # make sure the response only returns the original image url of the item
             each["image"] = each["image"]["original_url"]
-        return jsonify({"result" : list_of_issues}), 200
+            if each["issue_number"] == issue["issue_number"] and each["name"] == issue["name"]:
+                list_to_return.append(each)
+        return jsonify({"result" : list_to_return}), 200
     
 
 
@@ -298,7 +300,7 @@ async def addVolumeToCollectionById(current_user, volumeid):
 
 @app.route("/comic/volume", methods=["GET"])
 @tokenRequired
-async def addVolumeToCollection(current_user):
+async def getVolumeInformation(current_user):
     # if the json object is volume, then we add the volume to the database for the user and then we also find 
     # the issues related to the volume and add them to the database 
     db = getDB()
@@ -316,23 +318,10 @@ async def addVolumeToCollection(current_user):
     response = requests.get(url=url, headers=headers, params=params)
     json_response = response.json()
     list_of_volumes = json_response["results"]
-    # in order to fix this code, I will need to do something similar to get the full list of volumes and the iterate through the list 
-    # and then add them to the list to insert into the database. 
-    if "list_of_volumes" in data["volume"]:
-        for each in data["volume"]["list_of_volumes"]:
-            exist = checkIfExist("volume", each)
-            if not exist:
-                addItemToDB("volume", each)
-            if not checkRelationExists("volume", current_user, each):
-                addRelationToUser("volume", current_user, each)
-
-            list_of_issues = returnListOfIssuesByVolumeID(each["id"])
-            addIssuesFromList(current_user, each, list_of_issues)
-        return jsonify({"message":"Done"}), 200
 
 
     if len(list_of_volumes) > 1:
-        start_time = time.time()
+        list_to_return = []
         if json_response["number_of_total_results"] > 100:
             count = 100
             while (len(list_of_volumes) != json_response["number_of_total_results"]):
@@ -344,16 +333,17 @@ async def addVolumeToCollection(current_user):
         for each in list_of_volumes:
             # make sure the response only returns the original image url of the item
             each["image"] = each["image"]["original_url"]
-        end_time = time.time()
-        print("Program ended in %s seconds" %(end_time - start_time))
+            if each["count_of_issues"] == volume["count_of_issues"]:
+                list_to_return.append(each)
 
-        return jsonify({"message" : "please return a list of volumes to add from the list.", "list_of_volumes" : list_of_volumes}), 200
+        return jsonify({"result" : {"list_of_volumes" : list_to_return}}), 200
 
 
 @app.route("/comics/volumes", methods=["GET"])
 @tokenRequired
-async def list_volumes(current_user):
-    query_params = request.args
+async def listVolumes(current_user):
+    print("working")
+    query_params = await request.args
     list_of_volumes = []
     db = getDB()
     cur = db.execute("""SELECT volumeid FROM UsersVolumes WHERE username=?""", [current_user["username"]])
@@ -383,7 +373,7 @@ async def list_volumes(current_user):
 
 @app.route("/comics/issues", methods=["GET"])
 @tokenRequired
-async def list_issues(current_user):
+async def listIssues(current_user):
     query_params = request.args
     list_of_issues = []
     db = getDB()
@@ -418,7 +408,7 @@ async def list_issues(current_user):
 
 @app.route("/comic/issue/<issueid>", methods=["GET"])
 @tokenRequired
-async def get_issue(current_user, issueid):
+async def getIssue(current_user, issueid):
     db = getDB()
     cur = db.execute("""SELECT issueid FROM UsersIssues WHERE username=?""", [current_user["username"]])
     issue_ids = cur.fetchall()
@@ -433,7 +423,7 @@ async def get_issue(current_user, issueid):
 
 @app.route("/comic/volume/<volumeid>", methods=["GET"])
 @tokenRequired
-async def get_volume(current_user, volumeid):
+async def getVolume(current_user, volumeid):
     db = getDB()
     cur = db.execute("""SELECT volumeid FROM UsersVolumes WHERE username=?""", [current_user["username"]])
     volume_ids = cur.fetchall()
@@ -448,7 +438,7 @@ async def get_volume(current_user, volumeid):
 
 @app.route("/comic/volume/<volumeid>", methods=["DELETE"])
 @tokenRequired
-async def delete_volume(current_user, volumeid):
+async def deleteVolume(current_user, volumeid):
     db = getDB()
     cur = db.execute("""SELECT * FROM UsersVolumes WHERE username=? AND volumeid=?""", [current_user["username"], volumeid])
     exist = cur.fetchone()
@@ -466,7 +456,7 @@ async def delete_volume(current_user, volumeid):
 
 @app.route("/comic/issue/<issueid>", methods=["DELETE"])
 @tokenRequired
-async def delete_issue(current_user, issueid):
+async def deleteIssue(current_user, issueid):
     db = getDB()
     cur = db.execute("""SELECT * FROM UsersIssues WHERE username=? AND issueid=?""", [current_user["username"], issueid])
     exist = cur.fetchone()

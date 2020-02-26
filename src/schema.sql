@@ -48,3 +48,5 @@ CREATE TABLE UsersVolumes (
 	FOREIGN KEY (volumeid) REFERENCES Volumes(volumeid),
 	UNIQUE (username, volumeid)
 );
+
+# Manga table should have id, name, publisher, author, illustrator, volumenumber
