@@ -343,7 +343,7 @@ async def getVolumeInformation(current_user):
 @tokenRequired
 async def listVolumes(current_user):
     print("working")
-    query_params = await request.args
+    query_params = request.args
     list_of_volumes = []
     db = getDB()
     cur = db.execute("""SELECT volumeid FROM UsersVolumes WHERE username=?""", [current_user["username"]])
