@@ -18,16 +18,23 @@ app.secret_key = 'mysecret'
 app.config.update({'DATABASE' : app.root_path/'api_server_comic.db'})
 
 def getDB():
+    # This function is the function to connect to the database and return
+    # the connection.
     if not hasattr(g, 'sqlite_db'):
         g.sqlite_db = connectDB()
     return g.sqlite_db
 
 def connectDB():
+    # This fucntion returns the connected database engine.
     engine = sqlite3.connect(app.config['DATABASE'])
     engine.row_factory = sqlite3.Row
     return engine
 
 def tokenRequired(f):
+    # This function acts as the authorisor of the app.
+    # This function returns the current user and passes it in to each 
+    # function that calls this decorated method if the token matches the user.
+    # This function returns an error message if the token is invalid.
     @wraps(f)
     def decorated(*args, **kwargs):
         token = None
@@ -52,7 +59,10 @@ def tokenRequired(f):
 
 
 def checkRelationExists(comic_type, current_user, item):
+    # This function checks if the relation between the current_user and the item
+    # exists in the database and returns the SQL Object if it exists, else None.
     db = getDB()
+    print(current_user["username"])
     if comic_type == "issue":
         cur = db.execute("""SELECT * FROM UsersIssues WHERE username=? AND issueid=?""", [current_user["username"], item["id"]])
         exist = cur.fetchone()
@@ -61,8 +71,14 @@ def checkRelationExists(comic_type, current_user, item):
         cur = db.execute("""SELECT * FROM UsersVolumes WHERE username=? AND volumeid=?""", [current_user["username"], item["id"]])
         exist = cur.fetchone()
         return exist
+    elif comic_type == "manga":
+        cur = db.execute("""SELECT * FROM UsersMangas WHERE username=? AND mangaid=?""", [current_user["username"], item["id"]])
+        exist = cur.fetchone()
+        return exist
 
 def checkIssueInVolume(volume, issue):
+    # This fucntion checks if the issue belongs to the volume in the database 
+    # and returns the SQL Object if it exists, else None.
     db = getDB()
     cur = db.execute("""SELECT * FROM IssuesInVolumes WHERE issueid=? AND volumeid=?""", [issue["id"], volume["id"]])
     exist = cur.fetchone()
@@ -70,6 +86,8 @@ def checkIssueInVolume(volume, issue):
 
 
 def checkIfExist(comic_type, item):
+    # This function checks if the item exists in the database depending on
+    # which type. If it exists then it is returned as a SQL Object, else None.
     db = getDB()
     if comic_type == "issue":
         cur = db.execute("""SELECT * FROM Issues WHERE issueid=?""", [item["id"]])
@@ -79,9 +97,16 @@ def checkIfExist(comic_type, item):
         cur = db.execute("""SELECT * FROM Volumes WHERE volumeid=?""", [item["id"]])
         exist = cur.fetchone()
         return exist
+    elif comic_type == "manga":
+        cur = db.execute("""SELECT * FROM MangaVolumes WHERE volumenumber=? AND name LIKE ?""", [item["volumenumber"], item["name"]])
+        exist = cur.fetchone()
+        return exist
+
 
 
 def addItemToDB(comic_type, item):
+    # This function add the item into the database depending on its type. 
+    # TODO add try/catch into this function.
     db = getDB()
     if comic_type == "issue":
         cur = db.execute("""INSERT INTO Issues (name, issueid, issuenumber) VALUES (?, ?, ?)""", [item["name"], item["id"], item["issue_number"]])
@@ -89,8 +114,16 @@ def addItemToDB(comic_type, item):
     elif comic_type == "volume":
         cur = db.execute("""INSERT INTO Volumes (name, volumeid, count_of_issues) VALUES (?, ?, ?)""", [item["name"], item["id"], item["count_of_issues"]])
         db.commit()
+    elif comic_type == "manga":
+        cur = db.execute("""INSERT INTO MangaVolumes (name, publisher, author, illustrator, volumenumber) VALUES (?, ?, ?, ?, ?)""", 
+            [item["name"], item["publisher"], item["author"], item["illustrator"], item["volumenumber"]])
+        db.commit()
 
 def addRelationToUser(comic_type, current_user, item):
+    # This function adds a new row into the database that relates the current_user
+    # and the item depending on its type. 
+    # TODO add try/catch into this function. Maybe make sure it returns something
+    # if successful.
     db = getDB()
     if comic_type == "issue":
         cur = db.execute("""INSERT INTO UsersIssues (username, issueid) VALUES (?, ?)""", [current_user["username"], item["id"]])
@@ -98,16 +131,22 @@ def addRelationToUser(comic_type, current_user, item):
     elif comic_type == "volume":
         cur = db.execute("""INSERT INTO UsersVolumes (username, volumeid) VALUES (?, ?)""", [current_user["username"], item["id"]])
         db.commit()
+    elif comic_type == "manga":
+        cur = db.execute("""INSERT INTO UsersMangas (username, mangaid) VALUES (?, ?)""", [current_user["username"], item["id"]])
+        db.commit()
 
 
 def addRelationToVolume(volume, issue):
+    # This function is specifically for the volume and the issue.
+    # This fucntion adds a row into the database to link the issue to the volume.
+    # TODO this also needs a try/catch here.
     db = getDB()
     cur = db.execute("""INSERT INTO IssuesInVolumes (volumeid, issueid) VALUES (?, ?)""", [volume["id"], issue["id"]])
     db.commit()
 
 
 def addIssuesFromList(current_user, volume, issues_list):
-    # function to add issue by list
+    # function to add issues by list
     # check if they are already in the database
     for each in issues_list:
         if not checkIfExist("issue", each):
@@ -122,6 +161,10 @@ def addIssuesFromList(current_user, volume, issues_list):
 
 
 def returnListOfIssuesByVolumeID(volumeid):
+    # This function returns a list of issues from the ComicVine server when
+    # the volumeid is passed as a parameter.
+    # This function sends a request to the ComicVine server and filters the 
+    # result by the volumeid.
     headers = {"User-agent" : "My User-agent 1.0"}
     filter_field = "volume:" + str(volumeid)
     params = {"api_key" : API_KEY, "filter" : filter_field, "field_list" : "name,id,issue_number", "format" : "json"}
@@ -146,6 +189,8 @@ def returnListOfIssuesByVolumeID(volumeid):
 
 @app.cli.command('init_db')
 def init_db():
+    # This function creates a command that can run on the command line to 
+    # create a database using the schema.sql file in your directory.
     db_connect = connectDB()
     with open(Path(__file__).parent/'schema.sql', mode='r') as file_:
         db_connect.cursor().executescript(file_.read())
@@ -154,6 +199,7 @@ def init_db():
 
 @app.route("/")
 async def index():
+    # TODO link to the readme.
     return "Hello world!"
 
 
@@ -272,6 +318,8 @@ async def getIssueInformation(current_user):
 async def addVolumeToCollectionById(current_user, volumeid):
     db = getDB()
 
+    print(current_user)
+
     headers = {"User-agent" : "My User-agent 1.0"}
     filter_field = "id:" + str(volumeid)
     params = {"api_key" : API_KEY, "filter" : filter_field, "field_list" : "name,id,count_of_issues,image", "format" : "json"}
@@ -283,6 +331,7 @@ async def addVolumeToCollectionById(current_user, volumeid):
 
     if len(volume_returned) == 1:
         volume_to_add = volume_returned[0]
+        print(volume_to_add)
         if not checkIfExist("volume", volume_to_add):
             addItemToDB("volume", volume_to_add)
         if not checkRelationExists("volume", current_user, volume_to_add):
@@ -333,7 +382,7 @@ async def getVolumeInformation(current_user):
         for each in list_of_volumes:
             # make sure the response only returns the original image url of the item
             each["image"] = each["image"]["original_url"]
-            if each["count_of_issues"] == volume["count_of_issues"]:
+            if int(each["count_of_issues"]) == int(volume["count_of_issues"]):
                 list_to_return.append(each)
 
         return jsonify({"result" : {"list_of_volumes" : list_to_return}}), 200
@@ -466,3 +515,79 @@ async def deleteIssue(current_user, issueid):
         return jsonify({"result" : "Issue has been deleted from user"}), 200
     return jsonify({"result" : "Issue not found under username"}), 404
 
+
+@app.route("/manga/volume", methods=["POST"])
+@tokenRequired
+async def addMangaVolume(current_user):
+    db = getDB()
+    json_body = await request.get_json()
+    if "manga" in json_body:
+        manga_info = json_body["manga"]
+        # {"manga" : {"name" : "blah", "publisher" : "blah", "author" : "blah", "illustrator" : "blah", "volumenumber" : "blah"}}
+        if not "publisher" in manga_info:
+            manga_info["publisher"] = None
+        if not "author" in manga_info:
+            manga_info["author"] = None
+        if not "illustrator" in manga_info:
+            manga_info["illustrator"] = None
+        existing_manga = checkIfExist("manga", manga_info)
+        if not existing_manga:
+            try:
+                addItemToDB("manga", manga_info)
+                existing_manga = checkIfExist("manga", manga_info) # Here we run the function again to get the id from the DB.
+            except:
+                return jsonify({"message" : "Something went wrong. Try again later."}), 500
+        if not checkRelationExists("manga", current_user, existing_manga):
+            addRelationToUser("manga", current_user, existing_manga)
+            return jsonify({"message" : "This manga has been added"}), 200
+        else:
+            return jsonify({"message" : "This manga already belongs to the user."}), 409
+    else:
+        return jsonify({"message" : "Could not find manga field in your json body. Please try again."}), 408
+
+
+@app.route("/manga/volumes", methods=["GET"])
+@tokenRequired
+async def listMangaVolumes(current_user):
+    query_params = request.args
+    list_of_mangas = []
+    db = getDB()
+    cur = db.execute("""SELECT mangaid FROM UsersMangas WHERE username=?""", [current_user["username"]])
+    manga_ids = cur.fetchall()
+    if "filter" in query_params:
+        field, value = query_params["filter"].split(":", 1)
+        search_name = "%" + value + "%"
+    for each in manga_ids:
+        each_id = each["mangaid"]
+        if "filter" in query_params:
+            if field == "volumenumber":
+                cur = db.execute("""SELECT * FROM MangaVolumes WHERE id=? AND volumenumber LIKE ?""", [each_id, value])
+            else:
+                cur = db.execute(f"""SELECT * FROM MangaVolumes WHERE id=?AND {field} LIKE ?""", [each_id, search_name])
+        else:
+            cur = db.execute("""SELECT * FROM MangaVolumes WHERE id=?""", [each_id])
+        item = cur.fetchone()
+        if item:
+            list_of_mangas.append({"id" : item["id"], "name" : item["name"], "volumenumber" : item["volumenumber"], "publisher" : item["publisher"], "author" : item["author"], "illustrator" : item["illustrator"]})
+    if "sort" in query_params:
+        sort_param = query_params["sort"].split("_")
+        sort_field = sort_param[0]
+        if sort_field == "volumenumber":
+            newlist = sorted(list_of_mangas, key=lambda k: int(k[sort_field]), reverse=(True if len(sort_param) > 1 and "desc" == sort_param[1] else False))
+        else:
+            newlist = sorted(list_of_mangas, key=lambda k: k[sort_field], reverse=(True if len(sort_param) > 1 and "desc" == sort_param[1] else False))
+        return jsonify({"list_of_issues" : newlist}), 200
+    return jsonify({"list_of_issues" : list_of_mangas}), 200
+
+
+@app.route("/manga/volume/<manga_id>", methods=["DELETE"])
+@tokenRequired
+async def deleteMangaVolume(current_user, manga_id):
+    db = getDB()
+    cur = db.execute("""SELECT * FROM UsersMangas WHERE username=? AND mangaid=?""", [current_user["username"], manga_id])
+    exist = cur.fetchone()
+    if exist:
+        cur = db.execute("""DELETE FROM UsersMangas WHERE username=? AND mangaid=?""", [current_user["username"], manga_id])
+        db.commit()
+        return jsonify({"result" : "Manga volume has been deleted from user"}), 200
+    return jsonify({"result" : "Manga volume not found under username"}), 404

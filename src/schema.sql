@@ -49,4 +49,21 @@ CREATE TABLE UsersVolumes (
 	UNIQUE (username, volumeid)
 );
 
-# Manga table should have id, name, publisher, author, illustrator, volumenumber
+DROP TABLE IF EXISTS MangaVolumes;
+CREATE TABLE MangaVolumes (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	name VARCHAR(50) NOT NULL,
+	publisher VARCHAR(50),
+	author VARCHAR(50),
+	illustrator VARCHAR(50),
+	volumenumber VARCHAR(20) NOT NULL
+);
+
+DROP TABLE IF EXISTS UsersMangas;
+CREATE TABLE UsersMangas (
+	username VARCHAR(50) NOT NULL,
+	mangaid INTEGER NOT NULL,
+	FOREIGN KEY (username) REFERENCES Users(username),
+	FOREIGN KEY (mangaid) REFERENCES MangaVolumes(id),
+	UNIQUE (username, mangaid)
+);
