@@ -3,6 +3,8 @@ import jwt
 import datetime
 import requests
 import time
+import markdown
+import os
 
 from quart import Quart
 from quart import session, request, jsonify, g
@@ -200,8 +202,10 @@ def init_db():
 @app.route("/")
 async def index():
     # TODO link to the readme.
-    return "Hello world!"
+    with open(os.path.dirname(app.root_path) + "/README.md", "r") as markdown_file:
+        content = markdown_file.read()
 
+        return markdown.markdown(content)
 
 @app.route("/user", methods=['POST'])
 async def createUser():
