@@ -274,9 +274,9 @@ async def addIssueToCollectionById(current_user, issueid):
         if checkIfExist("volume", volume):
             addRelationToVolume(volume, issue)
 
-        return jsonify({"result" : "Issue added"}), 201
+        return jsonify({"message" : "Issue added"}), 201
     else:
-        return jsonify({"result" : "Please try again with the correct id"}), 404
+        return jsonify({"message" : "Please try again with the correct id"}), 404
 
 
 @app.route("/comic/issue", methods=["GET"])
@@ -342,9 +342,9 @@ async def addVolumeToCollectionById(current_user, volumeid):
         list_of_issues = returnListOfIssuesByVolumeID(volumeid)
         print(len(list_of_issues))
         addIssuesFromList(current_user, volume_to_add, list_of_issues)
-        return jsonify({"result" : "Success"}), 201
+        return jsonify({"message" : "Success"}), 201
     else:
-        return jsonify({"result" : "Please try again with the correct id"}), 404
+        return jsonify({"message" : "Please try again with the correct id"}), 404
 
 
 @app.route("/comic/volume", methods=["GET"])
@@ -416,7 +416,7 @@ async def listVolumes(current_user):
             newlist = sorted(list_of_volumes, key=lambda k: k[sort_field], reverse=(True if len(sort_param) > 1 and "desc" == sort_param[1] else False))
         else:
             newlist = sorted(list_of_volumes, key=lambda k: int(k[sort_field]), reverse=(True if len(sort_param) > 1 and "desc" == sort_param[1] else False))
-        return jsonify({"list_of_issues" : newlist}), 200
+        return jsonify({"list_of_volumes" : newlist}), 200
     return jsonify({"list_of_volumes" : list_of_volumes}), 200
 
 
@@ -467,7 +467,7 @@ async def getIssue(current_user, issueid):
             item = cur.fetchone()
             if item:
                 return jsonify({"issue" : {"issueid" : item["issueid"], "name" : item["name"], "issuenumber" : item["issuenumber"]}}), 200
-    return jsonify({"result" : "no such issue belongs to the user"}), 404
+    return jsonify({"message" : "no such issue belongs to the user"}), 404
 
 
 @app.route("/comic/volume/<volumeid>", methods=["GET"])
@@ -482,7 +482,7 @@ async def getVolume(current_user, volumeid):
             item = cur.fetchone()
             if item:
                 return jsonify({"volume" : {"volumeid" : item["volumeid"], "name" : item["name"], "count_of_issues" : item["count_of_issues"]}}), 200
-    return jsonify({"result" : "no such volume belongs to the user"}), 404
+    return jsonify({"message" : "no such volume belongs to the user"}), 404
 
 
 @app.route("/comic/volume/<volumeid>", methods=["DELETE"])
@@ -499,8 +499,8 @@ async def deleteVolume(current_user, volumeid):
         for each in issues_list:
             cur = db.execute("""DELETE FROM UsersIssues WHERE username=? AND issueid=?""", [current_user["username"], each["issueid"]])
             db.commit()
-        return jsonify({"result" : "Volume has been deleted from user"}), 200
-    return jsonify({"result" : "Volume not found under username"}), 404
+        return jsonify({"message" : "Volume has been deleted from user"}), 200
+    return jsonify({"message" : "Volume not found under username"}), 404
 
 
 @app.route("/comic/issue/<issueid>", methods=["DELETE"])
@@ -576,8 +576,8 @@ async def listMangaVolumes(current_user):
             newlist = sorted(list_of_mangas, key=lambda k: int(k[sort_field]), reverse=(True if len(sort_param) > 1 and "desc" == sort_param[1] else False))
         else:
             newlist = sorted(list_of_mangas, key=lambda k: k[sort_field], reverse=(True if len(sort_param) > 1 and "desc" == sort_param[1] else False))
-        return jsonify({"list_of_issues" : newlist}), 200
-    return jsonify({"list_of_issues" : list_of_mangas}), 200
+        return jsonify({"list_of_mangas" : newlist}), 200
+    return jsonify({"list_of_mangas" : list_of_mangas}), 200
 
 
 @app.route("/manga/volume/<manga_id>", methods=["DELETE"])
@@ -589,5 +589,5 @@ async def deleteMangaVolume(current_user, manga_id):
     if exist:
         cur = db.execute("""DELETE FROM UsersMangas WHERE username=? AND mangaid=?""", [current_user["username"], manga_id])
         db.commit()
-        return jsonify({"result" : "Manga volume has been deleted from user"}), 200
-    return jsonify({"result" : "Manga volume not found under username"}), 404
+        return jsonify({"message" : "Manga volume has been deleted from user"}), 200
+    return jsonify({"message" : "Manga volume not found under username"}), 404
